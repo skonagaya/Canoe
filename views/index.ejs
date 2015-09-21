@@ -11,7 +11,7 @@ html,body{ margin:0; padding:0; height:100%; width:100%; }
   overflow:hidden; /* or overflow:auto; if you want scrollbars */
 }
 </style>
-<script src="http://www.google.com/jsapi" type="text/javascript"></script>
+<script src="https://www.google.com/jsapi" type="text/javascript"></script>
 <script type="text/javascript">
 /**
 * matter.js edge-master 2015-08-17
@@ -9022,6 +9022,7 @@ module.exports = RenderPixi;
 </script>
 <script type="text/javascript">google.load("jquery", "1.3.2");</script>
 <script type="text/javascript">
+
 (function() {
 
 	var data = {};
@@ -9033,6 +9034,11 @@ module.exports = RenderPixi;
 	var CanoeGame = {};
 	var _engine;
 	var _sceneName;
+    var _runner;
+    var _bodies = {};
+        
+    var _sceneWidth = document.documentElement.clientWidth;
+    var _sceneHeight = document.documentElement.clientHeight;
 	//var body = document.querySelector("body");
 
 	// Matter.js module aliases
@@ -9041,18 +9047,28 @@ module.exports = RenderPixi;
 	var Bodies = Matter.Bodies;
 	var Body = Matter.Body;
 	var Vector = Matter.Vector;
+    var Runner = Matter.Runner;
 
 	CanoeGame.init = function() {
 		var container = document.getElementById('canvas-container');
 
 		// create a Matter.js engine
 		_engine = Engine.create(container);
+        _runner = Runner.create();
 
 		_engine.world.gravity.y = 0;
 		_engine.world.gravity.x = 0;
 
+        CanoeGame.updateScene();
+        CanoeGame['buildMap']();
+
+
+        draw();
+
+
+/*
 		setTimeout(function() {	
-			var runner = Engine.run(_engine);
+			//var runner = Engine.run(_engine);
 
 			// pass through runner as timing for debug rendering
 			_engine.metrics.timing = runner;
@@ -9065,31 +9081,113 @@ module.exports = RenderPixi;
 		_sceneName = 'canoe';
 
 		// set up a scene with bodies
-		//CanoeGame[_sceneName]();
+		CanoeGame[_sceneName]();
+
+*/
 	};
 
+	function draw(){  
+        var DEBUG = false;
 
-	$.ajax({
-		type: 'POST',
-		data: JSON.stringify(data),
-		contentType: 'application/json',
-		url: '/endpoint',						
-			success: function(data) {
+		Runner.tick(_runner, _engine, 1000/60);       // Update MatterJS
+        //updateCamera();
 
-				//console.log('success');
-				data = data.substring(1, data.length-1);
-				//console.log('data:\t\t' + data);
+		requestAnimationFrame(draw);
+	}
 
-				Map = JSON.parse(data);
-				MapWidth = Map.length;
-				MapHeight = Map[0].length;
+    function updateCamera(){
+/*
+        var yCenter = _sceneHeight/2;           // Y coordinate of center of screen
+        var xCenter = _sceneWidth/2;            // X coordinate of center of screen
+        var yQ1 = _sceneHeight * 1/4;           // Y coordinate of 1 quarter  down the screen
+        var yQ3 = _sceneHeight * 3/4;           // Y coordinate of 3 quarters down the screen
+        var xQ1 = _sceneWidth * 1/4;            // X coordiante of 1 quarter  right of the screen
+        var xQ3 = _sceneWidth * 3/4;            // X coordinate of 3 quarters right of the screen
 
-				CanoeGame[_sceneName]();
+        var userPos = _bodies.user.position;    // Position of user canoe
+        var stableOffsetThreshold = 100;        // Offset allowed to move camera to center of screen, "stable camera position"
+        var CameraMovementRation = 0.0005;      // Scale of camera movement velocity
+        var userMovementRation = 0.05;          // Scale of user canoe velocity
+        var CameraActionThreshold = 0.5;        // Speed the user must move in order to invoke camera repositioning
 
-				//var asdf = eval(data);
-				//console.log(asdf[0][1]);
-		}
-	});
+        console.log(_bodies.user.velocity.y);
+
+        if (_bodies.user.speed < CameraActionThreshold) {stableOffsetThreshold = 150;}  // If canoe is not moving, move camera to center
+        else if (_bodies.wall.velocity.y < -CameraActionThreshold) {           // If canoe is moving upward, move camera ahead up
+            yCenter = yQ1; 
+            xCenter = xQ1;
+        }
+        else if (_bodies.wall.velocity.y >  CameraActionThreshold) {           // If canoe is moving downward, move camera ahead down
+            yCenter = yQ3; 
+            xCenter = xQ3;
+        }
+
+        if ( Math.abs(userPos.y-yCenter) < stableOffsetThreshold && 
+             Math.abs(userPos.x-xCenter) < stableOffsetThreshold ){         // If stable, dont move the camera, noop
+            //console.log('STABLE');
+        } else {                                                            // Otherwise...
+
+            var cameraOffsetY = yCenter - userPos.y                         // get user distance from center of screen
+            var cameraOffsetX = xCenter - userPos.x                         // get user distance from center of screen
+            var cameraVelocityY = cameraOffsetY * CameraMovementRation;
+            var cameraVelocityX = cameraOffsetX * CameraMovementRation;
+            var userVelocityY = _bodies.user.velocity.y*userMovementRation;
+            var userVelocityX = _bodies.user.velocity.x*userMovementRation;
+            var cameraCorrectionY = cameraVelocityY -userVelocityY;
+            var cameraCorrectionX = cameraVelocityX -userVelocityX;
+
+            if (userPos.y < yCenter)  {                   // If above center...
+                _bodies.enemy.position.y += cameraCorrectionY;
+                _bodies.user.position.y += cameraCorrectionY;
+                _bodies.wall.position.y += cameraCorrectionY;
+
+                //console.log('Up');
+            } else if (userPos.y > yCenter){               // If below center...
+                _bodies.enemy.position.y += cameraCorrectionY;
+                _bodies.user.position.y += cameraCorrectionY;
+                _bodies.wall.position.y += cameraCorrectionY;
+                //console.log('Down');
+            }
+
+            _bodies.enemy.position.x += cameraOffsetX;
+            _bodies.user.position.x += cameraOffsetX;
+            _bodies.wall.position.x += cameraOffsetX;
+            
+            if (userPos.x < xCenter)  {                   // If above center...
+                _bodies.enemy.position.x += cameraCorrectionX;
+                _bodies.user.position.x += cameraCorrectionX;
+                _bodies.wall.position.x += cameraCorrectionX;
+
+                //console.log('Up');
+            } else if (userPos.x > xCenter){               // If below center...
+                _bodies.enemy.position.x += cameraCorrectionX;
+                _bodies.user.position.x += cameraCorrectionX;
+                _bodies.wall.position.x += cameraCorrectionX;
+                //console.log('Down');
+            }
+            
+
+        } */
+        var yCenter = _sceneHeight/2;           // Y coordinate of center of screen
+        var xCenter = _sceneWidth/2;            // X coordinate of center of screen
+        var userPos = _bodies.user.position;    // Position of user canoe
+
+        _bodies.enemy.position.y -= _bodies.user.position.y - yCenter;
+        _bodies.enemy.position.x -= _bodies.user.position.x - xCenter;
+
+        _bodies.user.position.y -= _bodies.user.position.y - yCenter;
+        _bodies.user.position.x -= _bodies.user.position.x - xCenter;
+
+        _bodies.wall.position.x -= _bodies.user.position.x - xCenter;
+        _bodies.wall.position.y -= _bodies.user.position.y - yCenter;
+
+
+
+    }
+
+
+
+
 
 
 	if (window.addEventListener) {
@@ -9101,56 +9199,49 @@ module.exports = RenderPixi;
 
 	CanoeGame.buildMap = function() {
 
-		var GridSize = 6;
-		var UserCanoe;
 
 
-		var forcePoint = {
-		x: 0,
-		y: 0.050
-		};
+        $.ajax({
+            type: 'POST',
+            data: JSON.stringify(data),
+            contentType: 'application/json',
+            url: '/endpoint',                       
+                success: function(data) {
 
-		var keysDown = {};
-		var speed = 0.000002;
-		var turnPower = 300000;
-		var boxA = Bodies.rectangle(400, 400, 50, 50);
+                    console.log('success');
+                    data = data.substring(1, data.length-1);
+                    //console.log('data:\t\t' + data);
 
+                    Map = JSON.parse(data);
+                    MapWidth = Map.length;
+                    MapHeight = Map[0].length;
 
+                    //console.log(Map);
 
-		UserCanoe = Bodies.rectangle(900,500,50,50);
-		World.add(_engine.world, [boxA]);
+                    //var asdf = eval(data);
+                    //console.log(asdf[0][1]);
 
-        $('body').keydown(function( event ) {
-            if ( event.which == 39 ) { // RIGHT KEY
-                event.preventDefault();
-                //Body.applyForce(boxA, Vector.add(boxA.position,{x: 144030,y: 30}), Vector.rotate({x:-amplitude,y:-amplitude},boxA.angle));
-                //Body.applyForce(boxA, {x: 430,y: 430}, Vector.rotate({x:-amplitude,y:-amplitude},boxA.angle));
-                var newX = boxA.position.x + turnPower * Math.cos(boxA.angle + 0 * Math.PI / 8);
-                var newY = boxA.position.y + turnPower * Math.sin(boxA.angle + 0 * Math.PI / 8);
-                //var newX = boxA.position.x + 100 *Math.cos(boxA.angle - )
-                //var newY = boxA.position.y + 50 * Math.sin(boxA.angle)
-                //Body.applyForce(boxA, Vector.add(boxA.position, {x:500000,y:50}), Vector.rotate({x:-amplitude,y:-amplitude},boxA.angle));
-                //Body.applyForce(boxA, Vector.add(boxA.position, {x:(499600)*Math.cos(boxA.angle)+boxA.position.x,y:(50)*Math.sin(boxA.angle)+boxA.position.y}), Vector.rotate({x:-amplitude,y:-amplitude},boxA.angle));
-                Body.applyForce(boxA, Vector.add(boxA.position, {x:newX,y:newY}), Vector.rotate({x:speed,y:-speed},boxA.angle));
-                //Body.applyForce(boxA, Vector.add(boxA.position, {x:newX,y:newY}), Vector.rotate({x:-0.002,y:-0.01},boxA.angle));
-            }
-            if ( event.which == 37 ) { // LEFT KEY
-                event.preventDefault();
-                var newX = boxA.position.x + turnPower * Math.cos(boxA.angle + 8 * Math.PI / 8);
-                var newY = boxA.position.y + turnPower * Math.sin(boxA.angle + 8 * Math.PI / 8);
-                Body.applyForce(boxA, Vector.add(boxA.position, {x:newX,y:newY}), Vector.rotate({x:-speed,y:-speed},boxA.angle));
+                    var gridSize = 6;
+                    for (var x=0; x<MapWidth; x++) {
+                        // inner loop applies to sub-arrays
+                        for (var y=0; y<MapHeight; y++) {
+                            // accesses each element of each sub-array in turn
+                            //console.log( Map[x][y] ); 
+                            if (Map[x][y] == 1)
+                                World.add(_engine.world,[Bodies.rectangle(gridSize/2+x*gridSize, gridSize/2+y*gridSize, gridSize, gridSize)]);
+                        }
+                    }
+/*
+                    var vertices = [{x: 0, y: 0}, {x: 50, y:25}, {x: 100, y: 0}, {x: 50, y: 50}];
+                    var obj = Bodies.fromVertices(100, 100, vertices, {
+                        isStatic: true,
+                        render: {
+                            fillStyle: '#4ECDC4',
+                            strokeStyle: '#4ECDC4'
+                        }}, true);
 
-                //Body.applyForce(boxA, {x: -144430,y: 430}, Vector.rotate({x:speed,y:-speed},boxA.angle));
-            }
-            if ( event.which == 32 ) { // SPACE BAR 
-                event.preventDefault();
-                //alert(boxA.angle);
-                var newX = boxA.position.x + 50 * Math.cos(boxA.angle + 0 * Math.PI / 8);
-                var newY = boxA.position.y + 50 * Math.sin(boxA.angle + 0 * Math.PI / 8);
-                //var newX = boxA.position.x + 100 *Math.cos(boxA.angle)
-                //var newY = boxA.position.y + 50 * Math.sin(boxA.angle)
-                //World.add(engine.world, Bodies.rectangle(boxA.position.x+50, boxA.position.y+50, 5, 5));
-                World.add(engine.world, Bodies.rectangle(newX, newY, 5, 5));
+                    World.add(engine.world, [obj]);
+                    */
             }
         });
 	}
@@ -9159,12 +9250,12 @@ module.exports = RenderPixi;
 
 	CanoeGame.canoe = function() {
 		// create two boxes and a ground
-		var boxA = Bodies.rectangle(400, 400, 50, 50);
-		var boxB = Bodies.rectangle(450, 50, 80, 80);
-		var ground = Bodies.rectangle(400, 610, 810, 60, { isStatic: true });
+		_bodies.user = Bodies.rectangle(_sceneWidth/2, _sceneHeight/2, 50, 50);
+		_bodies.enemy = Bodies.rectangle(450, 50, 80, 80);
+		_bodies.wall = Bodies.rectangle(400, 610, 810, 60);
 
 		// add all of the bodies to the world
-		World.add(_engine.world, [boxA, boxB, ground]);
+		World.add(_engine.world, [_bodies.user, _bodies.enemy, _bodies.wall]);
         
 
 		var forcePoint = {
@@ -9172,40 +9263,46 @@ module.exports = RenderPixi;
 		y: 0.050
 		};
 
+        var cameraSpeed = 0;
+
 		var keysDown = {};
 		var speed = 0.002;
 		var turnPower = 300000;
 
+
 		$('body').keydown(function( event ) {
+
+
+
 			if ( event.which == 39 ) { // RIGHT KEY
 				event.preventDefault();
-				//Body.applyForce(boxA, Vector.add(boxA.position,{x: 144030,y: 30}), Vector.rotate({x:-amplitude,y:-amplitude},boxA.angle));
-				//Body.applyForce(boxA, {x: 430,y: 430}, Vector.rotate({x:-amplitude,y:-amplitude},boxA.angle));
-				var newX = boxA.position.x + turnPower * Math.cos(boxA.angle + 0 * Math.PI / 8);
-				var newY = boxA.position.y + turnPower * Math.sin(boxA.angle + 0 * Math.PI / 8);
-				//var newX = boxA.position.x + 100 *Math.cos(boxA.angle - )
-				//var newY = boxA.position.y + 50 * Math.sin(boxA.angle)
-				//Body.applyForce(boxA, Vector.add(boxA.position, {x:500000,y:50}), Vector.rotate({x:-amplitude,y:-amplitude},boxA.angle));
-				//Body.applyForce(boxA, Vector.add(boxA.position, {x:(499600)*Math.cos(boxA.angle)+boxA.position.x,y:(50)*Math.sin(boxA.angle)+boxA.position.y}), Vector.rotate({x:-amplitude,y:-amplitude},boxA.angle));
-				Body.applyForce(boxA, Vector.add(boxA.position, {x:newX,y:newY}), Vector.rotate({x:speed,y:-speed},boxA.angle));
-				//Body.applyForce(boxA, Vector.add(boxA.position, {x:newX,y:newY}), Vector.rotate({x:-0.002,y:-0.01},boxA.angle));
+				//Body.applyForce(_bodies.user, Vector.add(_bodies.user.position,{x: 144030,y: 30}), Vector.rotate({x:-amplitude,y:-amplitude},_bodies.user.angle));
+				//Body.applyForce(_bodies.user, {x: 430,y: 430}, Vector.rotate({x:-amplitude,y:-amplitude},_bodies.user.angle));
+				var newX = _bodies.user.position.x + turnPower * Math.cos(_bodies.user.angle + 0 * Math.PI / 8);
+				var newY = _bodies.user.position.y + turnPower * Math.sin(_bodies.user.angle + 0 * Math.PI / 8);
+				//var newX = _bodies.user.position.x + 100 *Math.cos(_bodies.user.angle - )
+				//var newY = _bodies.user.position.y + 50 * Math.sin(_bodies.user.angle)
+				//Body.applyForce(_bodies.user, Vector.add(_bodies.user.position, {x:500000,y:50}), Vector.rotate({x:-amplitude,y:-amplitude},_bodies.user.angle));
+				//Body.applyForce(_bodies.user, Vector.add(_bodies.user.position, {x:(499600)*Math.cos(_bodies.user.angle)+_bodies.user.position.x,y:(50)*Math.sin(_bodies.user.angle)+_bodies.user.position.y}), Vector.rotate({x:-amplitude,y:-amplitude},_bodies.user.angle));
+				Body.applyForce(_bodies.user, Vector.add(_bodies.user.position, {x:newX,y:newY}), Vector.rotate({x:speed,y:-speed},_bodies.user.angle));
+				//Body.applyForce(_bodies.user, Vector.add(_bodies.user.position, {x:newX,y:newY}), Vector.rotate({x:-0.002,y:-0.01},_bodies.user.angle));
 			}
 			if ( event.which == 37 ) { // LEFT KEY
 				event.preventDefault();
-				var newX = boxA.position.x + turnPower * Math.cos(boxA.angle + 8 * Math.PI / 8);
-				var newY = boxA.position.y + turnPower * Math.sin(boxA.angle + 8 * Math.PI / 8);
-				Body.applyForce(boxA, Vector.add(boxA.position, {x:newX,y:newY}), Vector.rotate({x:-speed,y:-speed},boxA.angle));
+				var newX = _bodies.user.position.x + turnPower * Math.cos(_bodies.user.angle + 8 * Math.PI / 8);
+				var newY = _bodies.user.position.y + turnPower * Math.sin(_bodies.user.angle + 8 * Math.PI / 8);
+				Body.applyForce(_bodies.user, Vector.add(_bodies.user.position, {x:newX,y:newY}), Vector.rotate({x:-speed,y:-speed},_bodies.user.angle));
 
-				//Body.applyForce(boxA, {x: -144430,y: 430}, Vector.rotate({x:speed,y:-speed},boxA.angle));
+				//Body.applyForce(_bodies.user, {x: -144430,y: 430}, Vector.rotate({x:speed,y:-speed},_bodies.user.angle));
 			}
 			if ( event.which == 32 ) { // SPACE BAR 
 				event.preventDefault();
-				//alert(boxA.angle);
-				var newX = boxA.position.x + 50 * Math.cos(boxA.angle + 0 * Math.PI / 8);
-				var newY = boxA.position.y + 50 * Math.sin(boxA.angle + 0 * Math.PI / 8);
-				//var newX = boxA.position.x + 100 *Math.cos(boxA.angle)
-				//var newY = boxA.position.y + 50 * Math.sin(boxA.angle)
-				//World.add(engine.world, Bodies.rectangle(boxA.position.x+50, boxA.position.y+50, 5, 5));
+				//alert(_bodies.user.angle);
+				var newX = _bodies.user.position.x + 50 * Math.cos(_bodies.user.angle + 0 * Math.PI / 8);
+				var newY = _bodies.user.position.y + 50 * Math.sin(_bodies.user.angle + 0 * Math.PI / 8);
+				//var newX = _bodies.user.position.x + 100 *Math.cos(_bodies.user.angle)
+				//var newY = _bodies.user.position.y + 50 * Math.sin(_bodies.user.angle)
+				//World.add(engine.world, Bodies.rectangle(_bodies.user.position.x+50, _bodies.user.position.y+50, 5, 5));
 				World.add(engine.world, Bodies.rectangle(newX, newY, 5, 5));
 			}
 		});
@@ -9215,9 +9312,7 @@ module.exports = RenderPixi;
     CanoeGame.updateScene = function() {
         if (!_engine)
             return;
-        
-        _sceneWidth = document.documentElement.clientWidth;
-        _sceneHeight = document.documentElement.clientHeight;
+
 
         var boundsMax = _engine.world.bounds.max,
             renderOptions = _engine.render.options,

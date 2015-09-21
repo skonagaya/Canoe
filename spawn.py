@@ -116,17 +116,17 @@ def PrintMap(mapToPrint):
 				print "?",
 		print ""
 
-def TrackFill(x,y,counter,gridList):
+def TrackFill(x,y,targetMark,counter,gridList):
 
-	if Map[x][y] != 0: return 0, None	# base case
+	if Map[x][y] != targetMark: return 0, None	# base case
 	Map[x][y] = 3 						# mark current grid
 	counter = counter + 1 				# increase counter
 	gridList.append((x,y))				# add to list
 
-	upCount, upList = TrackFill(x,y-1,0,[]) 		# iterate UP
-	rightCount, rightList = TrackFill(x+1,y,0,[]) 	# iterate RIGHT
-	downCount, downList = TrackFill(x,y+1,0,[]) 	# iterate DOWN
-	leftCount, leftList = TrackFill(x-1,y,0,[]) 	# iterate LEFT
+	upCount, upList = TrackFill(x,y-1,targetMark,0,[]) 		# iterate UP
+	rightCount, rightList = TrackFill(x+1,y,targetMark,0,[]) 	# iterate RIGHT
+	downCount, downList = TrackFill(x,y+1,targetMark,0,[]) 	# iterate DOWN
+	leftCount, leftList = TrackFill(x-1,y,targetMark,0,[]) 	# iterate LEFT
 
 	if upList != None: gridList = gridList + upList			# tally up coordinates
 	if rightList != None: gridList = gridList + rightList
@@ -142,11 +142,11 @@ def TrackFill(x,y,counter,gridList):
 def CompileMap():
 	bodyList = None
 	largestBodyCount = 0
-	for row in range(1,MapHeight-1):		# for each row
-		for column in range(1,MapWidth-1):	# for each column
+	for row in range(0,MapHeight-1):		# for each row
+		for column in range(0,MapWidth-1):	# for each column
 			daGrid = Map[column][row]
 			if daGrid == 0:											# if see a grid is water
-				fillCount, fillList = TrackFill(column,row,0,[])	# do flood fill to get size and coordinate of water
+				fillCount, fillList = TrackFill(column,row,0,0,[])	# do flood fill to get size and coordinate of water
 				if fillCount >= largestBodyCount:					# if the new fill count is larger than the last body
 					if bodyList != None and largestBodyCount != 0:	# and if it isnt the first body found
 						for x,y in bodyList: Map[x][y] = 1 			# fill the smaller body with land
@@ -192,9 +192,24 @@ def FindEnteranceIndex(map):
 		if map[column][MapHeight-2] == 0: enteranceList.append(column)
 	return enteranceList
 
+def GetInternalBoundary(map):
+	newMap = [[0 for x in range(MapHeight)] for x in range(MapWidth)]
+	for column in range (0,MapWidth-1):
+		for row in range (0,MapHeight-1):
+			counter = 0
+			if map[column][row-1] == 0: counter = counter + 1
+			if map[column+1][row] == 0: counter = counter + 1
+			if map[column][row+1] == 0: counter = counter + 1
+			if map[column-1][row] == 0: counter = counter + 1
+
+			if counter == 1 or counter == 2 or counter == 4: newMap[column][row] = 1
+			else : newMap[column][row] = 0
+	return newMap
+
 tempSeeds = None
 map1 = None
 map2 = None
+
 
 while True:
 	while True:
@@ -213,13 +228,14 @@ while True:
 	while True:
 		RandomFillMap()
 		SeedEnterance(tempSeeds)
-		MakeCaverns()
+		MakeCaverns() 
 		CompileMap()
 		if IsGoodQuality():
 			tempEnt = FindEnteranceIndex(Map)
 			if all(x in tempEnt for x in tempSeeds):
 				#PrintMap(map1)
 
+				#PrintMap(GetInternalBoundary(Map))
 				#PrintMap(Map)
 				print Map
 
